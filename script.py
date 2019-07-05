@@ -1,93 +1,104 @@
-# import requests
+import hvac  # Vault python package
+import psycopg2  # postgres python package
+import pdb  # python debugger package
+import requests  # python requests package
 
-# url = "http://127.0.0.1:8200/v1/database/config/postgre"
 
-# payload = "{\n  \t   \"plugin_name\": \"postgresql-database-plugin\",\n    \"allowed_roles\": \"readonly\",\n    \"connection_url\": \"postgres://postgres:postgres@172.21.0.3:5432/postgres?sslmode=disable\"\n}"
-# headers = {
-#     'X-Vault-Token': "b9ca7a04-cc95-5c87-6632-2d1c11d461c0",
-#     'Content-Type': "application/json",
-#     'cache-control': "no-cache"
-#     }
-
-# response = requests.request("POST", url, data=payload, headers=headers)
-
-# print(response.text)
-
-import hvac
-import psycopg2
-
-# Environment Variables
-VAULT_URL = 'http://localhost:8002'
-VAULT_TOKEN ='b9ca7a04-cc95-5c87-6632-2d1c11d461c0'
+# Environment Variables could be used as protected keys in CI/CD pipelines.
+VAULT_URL = 'http://127.0.0.1:8200'
+VAULT_TOKEN = 'b9ca7a04-cc95-5c87-6632-2d1c11d461c0'
 pg_username = 'postgres'
 pg_password = 'postgres'
 db_name = 'postgres'
 pg_hostname = '172.21.0.3'
 role_name = 'readonly'
 plugin_name = 'postgresql-database-plugin'
-sslmode = 'disable'
-config_name = 'postgrespython'
+ssl_mode = 'disable'
+config_name = 'postgres'
 policy_name = 'pythonapp'
-conn_url = 'postgres://postgres:postgres@172.21.0.3:5432/postgres?sslmode=disable'
+# conn_url = 'postgres://postgres:postgres@172.21.0.3:5432/postgres?ssl_mode=disable'
+conn_url = 'postgres://' + pg_username + ':' + pg_password + '@' + pg_hostname + ':5432/' +config_name + '?sslmode=' + ssl_mode
+config_path = 'database/config/' + config_name
+consul_host = 'http://127.0.0.1:8500'
+consul_kv_key = 'seal-config'
+consul_kv_path = 'vault/core/' + consul_kv_key
+consul_url = consul_host + '/v1/kv/' + consul_kv_path
 
-client = hvac.Client(url='http://127.0.0.1:8200',token='b9ca7a04-cc95-5c87-6632-2d1c11d461c0')
+# pdb.set_trace()
 
-auth_methods = client.sys.list_auth_methods()
-# print('The following auth methods are enabled: {auth_methods_list}'.format(
-#     auth_methods_list=', '.join(auth_methods['data'].keys()),
-# ))
-client.write('database/config/postgres', plugin_name='postgresql-database-plugin', allowed_roles='readonly', lease='24h', connection_url='postgres://postgres:postgres@172.21.0.3:5432/postgres?sslmode=disable')
-print(client.read('database/config/postgres'))
 
-def create_role_policy_token(role_name,policy_name):
-    readonly = open('./readonly.sql','r')
+def connect_with_vault(vu, vt):
+    client = hvac.Client(url=vu, token=vt)
+    return client
+
+
+def enable_postgres_security_engine(cp):
+    client = connect_with_vault(VAULT_URL, VAULT_TOKEN)
+    # pdb.set_trace()
+    client.write(cp, plugin_name=plugin_name, allowed_roles=role_name, lease='24h', connection_url=conn_url)
+    print(client.read(cp))
+    create_role_policy_token(role_name, policy_name, client)
+
+
+def create_role_policy_token(rn, pn, c):
+    readonly = open('./readonly.sql', 'r')
     readonly_sql = readonly.read()
-    print(readonly_sql)
-    client.write('database/roles/'+role_name, db_name=db_name, creation_statements=readonly_sql, default_ttl='1h', max_ttl='24h')
-    policy = open('./apps-policy.hcl','r')
+    # print(readonly_sql)
+    c.write('database/roles/' + rn, db_name=db_name, creation_statements=readonly_sql, default_ttl='1h', max_ttl='24h')
+    policy = open('./apps-policy.hcl', 'r')
     policy_hcl = policy.read()
     # print(type(policy_hcl))
     # Get credentials from the database secret engine
-    client.sys.create_or_update_policy(
-        name=policy_name,
+    c.sys.create_or_update_policy(
+        name=pn,
         policy=policy_hcl,
     )
-    token = client.create_token(policies=[policy_name], lease='1h')
+    token = c.create_token(policies=[pn], lease='1h')
     retrieve_username_password(token['auth']['client_token'])
-    
-def retrieve_username_password(client_token):
-    # client = connect2vault(client_token)
-    client = hvac.Client(url='http://127.0.0.1:8200',token=client_token)
-    userdetail = client.read('database/creds/readonly')
-    username = userdetail['data']['username']
-    password = userdetail['data']['password']
+
+
+def retrieve_username_password(token):
+    client2 = connect_with_vault(VAULT_URL, token)
+    # client = hvac.Client(url='http://127.0.0.1:8200',token=client_token)
+    user_detail = client2.read('database/creds/readonly')
+    username = user_detail['data']['username']
+    password = user_detail['data']['password']
     print(username)
     print(password)
-    connect(username,password)
-    
-def connect(username,password):
+    connect(username, password)
+
+
+def connect(un, passw):
     """ Connect to the PostgreSQL database server """
     conn = None
     try:
         # read connection parameters
-#         params = config()
+        #  params = config()
  
         # connect to the PostgreSQL server
         print('Connecting to the PostgreSQL database...')
-        conn = psycopg2.connect(host=pg_hostname,database=db_name, user=username, password=password)
+        conn = psycopg2.connect(host=pg_hostname,database=db_name, user=un, password=passw)
       
         # create a cursor
         cur = conn.cursor()
         
-   # execute a statement
+        # execute a statement
         print('PostgreSQL database version:')
-        cur.execute('SELECT version()')
+        # create_table_query = '''CREATE TABLE mobile
+        #           (ID INT PRIMARY KEY     NOT NULL,
+        #           MODEL           TEXT    NOT NULL,
+        #           PRICE         REAL); '''
+
+        read_table = 'select * from testtable;'
+        # cur.execute('SELECT version()')
+        # cur.execute(create_table_query)
+        cur.execute(read_table)
  
         # display the PostgreSQL database server version
         db_version = cur.fetchone()
         print(db_version)
        
-       # close the communication with the PostgreSQL
+        # close the communication with the PostgreSQL
         cur.close()
     except (Exception, psycopg2.DatabaseError) as error:
         print(error)
@@ -97,7 +108,16 @@ def connect(username,password):
             print('Database connection closed.')
 
 
-create_role_policy_token(role_name,policy_name)
-    
+def connect_to_consul():
 
- 
+    payload = ""
+    headers = {'cache-control': 'no-cache'}
+
+    response = requests.request("GET", consul_url, data=payload, headers=headers)
+
+    print("Value for Key '{}': {}".format(consul_kv_key, response.text))
+
+
+enable_postgres_security_engine(config_path)
+connect_to_consul()
+# create_role_policy_token(role_name,policy_name)

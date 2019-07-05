@@ -1,0 +1,5 @@
+{
+    "plugin_name": "postgresql-database-plugin",
+    "allowed_roles": "readonly",
+    "connection_url": "postgres://postgres:postgres@172.21.0.3:5432/postgres?sslmode=disable"
+}
