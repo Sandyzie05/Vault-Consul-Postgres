@@ -50,6 +50,7 @@ def enable_postgres_security_engine(cp):
     except KeyError as e:
         print("Check postgres connection parameters or it could be Vault connection type error: ", e)
 
+
 def create_role_policy_token(rn, pn, c):
     """Create role, policy and token.
     This creates a new role and maps it to SQL statement that, when ran,
@@ -72,6 +73,8 @@ def create_role_policy_token(rn, pn, c):
         )
         token = c.create_token(policies=[pn], lease='1h')
         retrieve_username_password(token['auth']['client_token'])
+        readonly.close()
+        policy.close()
     except KeyError:
         print("Check parameters passed to write role and policy.")
 
@@ -148,6 +151,7 @@ def connect_to_consul():
         print("Value for Key '{}': {}".format(consul_kv_key, response.text))
     except requests.exceptions.RequestException as e:
         print(e)
+
 
 enable_postgres_security_engine(config_path)
 connect_to_consul()

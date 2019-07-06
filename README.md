@@ -65,7 +65,7 @@ https://www.postgresql.org/
  
 4. The above command would build and deploy the docker containers. To check if the containers are up, run: 'docker ps -a'
 
-5. Once the containers are up, open the url's to check if vault and consul are accessible. For example: open http://localhost:8002 in your browser and see if the UI is accessible.
+5. Once the containers are up, open the url's to check if vault and consul are accessible. For example: open http://localhost:8200 in your browser and see if the UI is accessible.
 
 6. Now run 'docker exec -it vault_container_name bash' to run a bash prompt inside the vault instance. Before vault starts to accept services, we need to initialize and unseal vault. Run 'vault operator init'. This command will provide 5 keys and 1 root token. Copy the information securely and keep it handy.
 
